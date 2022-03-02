@@ -1,0 +1,113 @@
+---
+title: "Waste Management Phoenix Open"
+author: "Connor Demorest"
+date: "2/13/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, fig.width = 10, fig.height = 5, 
+                      cache = TRUE)
+library(tidyverse)
+library(magrittr)
+library(pdftools)
+library(stringr)
+library(rvest)
+library(odds.converter)
+```
+
+Load in WM Phoenix Open data and scrape tables from pdf
+```{r}
+dat = pdftools::pdf_text("WasteManagementPicksOnly.pdf")
+Results = dat %>% 
+  str_split(., "\n") %>% 
+  unlist %>% 
+  trimws(.) %>% 
+  str_split_fixed(., " {2,}", 2) %>% 
+  as_tibble %>% 
+  rename("Golfer" = "V1", "Points" = "V2") %>% 
+  filter(Points != "", Golfer != "2/13/2022", Golfer != "Team") %>% 
+  group_by(Golfer, Points) %>% 
+  summarise(Count = n())
+  
+
+Results[which(Results$Golfer == "Brendon Grace"), ]$Golfer = "Branden Grace"
+Results[which(Results$Golfer == "Si Woo Kim"), ]$Golfer = "Si-Woo Kim"
+``` 
+
+Grab DraftKings odds off internet
+Somehow make this user friendly if I make a Shiny? 
+```{r}
+url = "https://dknation.draftkings.com/2022/2/7/22921772/waste-management-phoenix-open-wm-odds-2022-favorites-sleepers-pga-tour-jon-rahm-hideki-matsuyama"
+path = '//*[@id="mP0LzC"]/div/table/tbody'
+Odds = read_html(url) %>% 
+  html_element(x = ., xpath = path) %>% 
+  html_text2 %>% 
+  str_split(., pattern = "\t") %>% 
+  unlist %>% 
+  str_remove(., "\n") %>% 
+  str_subset(., ".+") %>% 
+  matrix(., ncol = 4, byrow = T) %>% 
+  as_tibble() %>% 
+  rename("Golfer" = "V1", "WinOdds" = "V2", "T5Odds" = "V3", "T10Odds" = "V4")
+```
+
+Merge together
+```{r}
+groups = read_csv("/Users/connor/Desktop/OneDrive - Montana State University/Golf/Fantasy-Golf-Analytics/GolfersGroups.csv")
+
+comb_res = Results %>% 
+  full_join(Odds, by = "Golfer") %>% 
+  left_join(groups, by = "Golfer") %>% 
+  mutate(across(c(Points, Count), ~replace(., is.na(.), 0)),
+         across(Group, ~replace(., is.na(.), 7)), 
+         across(c(Points, WinOdds, T5Odds, T10Odds), ~str_remove_all(., "[,+]")), 
+         across(c(WinOdds, T5Odds, T10Odds), 
+                ~odds.us2prob(as.numeric(.)),
+                .names = "{col}_prob"),
+         Picked_prob  = Count/77,
+         WinWith_prob = WinOdds_prob/(Count+1))
+
+comb_res[which(comb_res$Golfer == "Sahith Theegala"), ]$Points = "445600"
+```
+
+Plot
+```{r}
+comb_res %>% 
+  ungroup %>%
+  filter(Group == 1) %>%
+  mutate(sc_Win_prob = WinOdds_prob/sum(.$WinOdds_prob),
+         sc_WW_prob = WinWith_prob/sum(.$WinWith_prob),
+         sc_Pick_prob = Picked_prob/sum(.$Picked_prob)) %>% 
+  pivot_longer(., cols = c("sc_Win_prob", "sc_Pick_prob", "sc_WW_prob"),
+               names_to = "Result",
+               values_to = "Probability") %>%
+  ggplot(data = ., aes(x = reorder(gsub(".* ", "", Golfer), -Probability), y = Probability, fill = Result)) +
+  geom_col(position = "dodge") +
+  theme_bw() + 
+  labs(x = "Golfer (in Group 1)",
+       y = "Scaled probability among Group 1 golfers",
+       title = "WM Phoenix Open - Draftkings opening odds",
+       caption = "Note: Dechambeau, Johnson, McIlroy, and Morikawa did not play.") +
+  scale_fill_discrete(name = "Result", labels = c("Picked", "Win", "Win with"))
+```
+
+Simulating probabilities:
+Find interesting questions to answer with this? 
+```{r}
+# Probs do not need to sum to 1. Looks like it gives identical results when I manually scale them vs the way it automatically scales them in the function
+pts = comb_res %>% ungroup %>% mutate(Points = as.double(Points)) %>% select(Points) %>% arrange(desc(Points)) %>% slice(1:40) %>% mutate(Place = 1:40)
+res = comb_res %>% select(Golfer, Count)
+
+# Sanity check: does Rahm win the correct proportion of times, should be ~0.091
+do_once = function(){
+sim = sample(x = comb_res$Golfer, replace = F, size = 40, prob = comb_res$WinOdds_prob)
+one_sim = tibble(Golfer = sim, pts) %>% left_join(., res, by = "Golfer")
+rahm_wins = one_sim[1, 1] == "Jon Rahm"
+return(rahm_wins)
+}
+# do_once()
+do_many = replicate(10000, do_once())
+mean(do_many) # Should be ~0.091
+```
+

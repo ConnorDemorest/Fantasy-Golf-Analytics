@@ -5,7 +5,7 @@ library(tidyverse)
 # We are treating the odds of winning from draftkings as the true probability of winning the tournament for now.
 # It's unlikely that we can outperform the Vegas odds to win, and if we can, why are we not rich yet?
 # Our choices based on this would have been horrible though :/. Trust the process? 
-dat = pdftools::pdf_data("Desktop/Results03_Farmers Insurance.pdf")
+dat = pdftools::pdf_data("Results03_Farmers Insurance.pdf")
 # Needs to be fixed very much
 dat2 <- do.call(rbind, dat[3:13]) %>% 
   select(y, text) %>% 
@@ -19,9 +19,9 @@ dat2 <- do.call(rbind, dat[3:13]) %>%
   summarise(Count = n())
 
 # Odds come from DraftKings (opening pre-tournament odds).
-odds = read_csv('Desktop/FarmersInsuranceOdds.csv') %>% mutate(First = gsub(" [^ ]*$", "", Golfer),
+odds = read_csv('FarmersInsuranceOdds.csv') %>% mutate(First = gsub(" [^ ]*$", "", Golfer),
                                                                Last = gsub(".* ", "", Golfer)) 
-groups = read_csv("Desktop/GolfersGroups.csv") %>% mutate(First = gsub(" [^ ]*$", "", Golfer),
+groups = read_csv("GolfersGroups.csv") %>% mutate(First = gsub(" [^ ]*$", "", Golfer),
                                                           Last = gsub(".* ", "", Golfer)) 
 odds2 = odds %>% 
   left_join(dat2, by = c("Last" = "text")) %>% 
@@ -40,7 +40,7 @@ odds2 = odds %>%
   
 odds2 %>% # 77 players in this week, magic number ooh 
   filter(Group == 1) %>% 
-  pivot_longer(cols = starts_with("Pr"),
+  pivot_longer(cols = c("PrWin","PrT5","PrT10","PrPicked"),
                names_to = "Result",
                values_to = "Probability") %>% 
   mutate(Result = factor(Result, levels = c("PrPicked", "PrWin", "PrT5", "PrT10"))) %>% 
