@@ -1,0 +1,312 @@
+---
+title: "Simulation"
+author: "Connor Demorest"
+date: "5/4/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+
+masters = read_csv("data/PicksOddscsv/12Masters.csv")
+
+teams = read_csv("mastpdf.csv")
+teams[which(teams$Golfer == "Brendon Grace"), ]$Golfer = "Branden Grace"
+teams[which(teams$Golfer == "Erik van Rooyen"), ]$Golfer = "Erik Van Rooyen"
+teams[which(teams$Golfer == "Sungjae Im"), ]$Golfer = "Sung Jae Im"
+teams[which(teams$Golfer == "Brandon Hankins"), ]$Golfer = "Brandon Harkins"
+teams[which(teams$Golfer == "Alex Noren"), ]$Golfer = "Alexander Noren"
+teams[which(teams$Golfer == "Rory McIIroy"), ]$Golfer = "Rory McIlroy"
+teams[which(teams$Golfer == "Tyrell Hatton"), ]$Golfer = "Tyrrell Hatton"
+teams[which(teams$Golfer == "Kyoung-Hoon Lee"), ]$Golfer = "K.H. Lee"
+masters[which(masters$Golfer == "Brendon Grace"), ]$Golfer = "Branden Grace"
+masters[which(masters$Golfer == "Erik van Rooyen"), ]$Golfer = "Erik Van Rooyen"
+masters[which(masters$Golfer == "Sungjae Im"), ]$Golfer = "Sung Jae Im"
+masters[which(masters$Golfer == "Brandon Hankins"), ]$Golfer = "Brandon Harkins"
+masters[which(masters$Golfer == "Alex Noren"), ]$Golfer = "Alexander Noren"
+masters[which(masters$Golfer == "Rory McIIroy"), ]$Golfer = "Rory McIlroy"
+masters[which(masters$Golfer == "Tyrell Hatton"), ]$Golfer = "Tyrrell Hatton"
+masters[which(masters$Golfer == "Kyoung-Hoon Lee"), ]$Golfer = "K.H. Lee"
+```
+## Data
+Best attempt for language is to say "golfer" for the professional golfers and "player" for the people choosing the professional golfers
+Every golfer that has odds. Golfers that were picked with no odds are assumed to be not playing, probably carried over from last week by forgetting to make picks
+Masters was chosen because most of the golfers played in it, and it's the biggest tournament of the year so far. Bad thing is that it's a limited field event. 
+
+```{r}
+# # Sanity check: does Rahm win the correct proportion of times
+# do_once = function(){ 
+# sim = sample(x = masters$Golfer, replace = F, size = nrow(masters), prob = masters$WinOdds_prob)
+# return(sim[1] == "Jon Rahm")
+# }
+# replicate(100, replicate(1000, do_once()) %>% mean) %>% density %>% plot
+# abline(v = 0.0716)
+# # Should be around 0.0716
+# masters[which(masters$Golfer=="Jon Rahm"), "WinOdds_prob"]/sum(masters$WinOdds_prob)
+# # Seems like it works
+```   
+
+Strategy 1: Choose golfers from each group completely randomly.
+
+```{r}
+reps = 5000
+money = matrix(nrow = 77, ncol = reps)
+rownames(money) = c(unique(teams$Player), "Connor_sim") %>% str_sort()
+Points_ord = masters %>% select(Points) %>% arrange(desc(Points)) %>% as.vector
+                   
+for(i in 1:reps) {
+samp = masters %>% 
+  select(-c(Count, WinOdds)) %>% 
+  filter(!is.na(Group)) %>% 
+  group_by(Group) %>% 
+  sample_n(size = 1, prob = NA) %>% 
+  ungroup
+
+picks = masters %>% 
+  select(Golfer, Points, Group, WinOdds_prob) %>%
+  anti_join(samp, by = "Golfer") %>% 
+  sample_n(size = 1, prob = NA) %>%
+  bind_rows(samp) %>% 
+  select(Golfer, Points) %>% 
+  mutate(Player = "Connor_sim")
+
+scramble = data.frame(Golfer = sample(x = masters$Golfer, 
+                                      replace = F, 
+                                      size = nrow(masters), 
+                                      prob = masters$WinOdds_prob)) %>% 
+  cbind(Points_ord)
+
+sim_money = teams %>% 
+  bind_rows(picks) %>% 
+  select(-Points) %>%
+  left_join(scramble, by = "Golfer") %>% 
+  mutate(across(Points, ~replace(., is.na(.), 0))) %>% 
+  group_by(Player) %>% 
+  summarise(Tot_points = sum(Points)) %>% 
+  arrange(desc(Tot_points)) %>% 
+  mutate(Money_won = c(70, 35, rep(0, 75))) %>% 
+  select(-Tot_points) %>% 
+  arrange(Player)
+money[, i] = sim_money$Money_won
+}
+# If we play this tournament 1000 times how much money do we make?
+ apply(money, 1, mean) %>% sort
+```
+
+Strategy 2: Our actual picks
+
+```{r}
+money2 = matrix(nrow = 77, ncol = reps)
+rownames(money2) = c(unique(teams$Player), "Connor_sim") %>% str_sort()
+                   
+for(i in 1:reps) {
+picks = masters %>% 
+  filter(Golfer %in% c("Brian Harman", "Brooks Koepka", "Cameron Davis", "Justin Rose", 
+                       "Paul Casey", "Tony Finau", "Xander Schauffele")) %>% 
+  select(Golfer, Points) %>% 
+  mutate(Player = "Connor_sim")
+
+scramble = data.frame(Golfer = sample(x = masters$Golfer, 
+                                      replace = F, 
+                                      size = nrow(masters), 
+                                      prob = masters$WinOdds_prob)) %>% 
+  cbind(Points_ord)
+
+sim_money = teams %>% 
+  bind_rows(picks) %>% 
+  select(-Points) %>%
+  left_join(scramble, by = "Golfer") %>% 
+  mutate(across(Points, ~replace(., is.na(.), 0))) %>% 
+  group_by(Player) %>% 
+  summarise(Tot_points = sum(Points)) %>% 
+  arrange(desc(Tot_points)) %>% 
+  mutate(Money_won = c(70, 35, rep(0, 75))) %>% 
+  select(-Tot_points) %>% 
+  arrange(Player)
+money2[, i] = sim_money$Money_won
+}
+# If we play this tournament 1000 times how much money do we make?
+m2 = apply(money2, 1, mean) %>% sort
+```
+
+
+Strategy 3: Choose golfers with best odds in each group
+
+```{r}
+money3 = matrix(nrow = 77, ncol = reps)
+rownames(money3) = c(unique(teams$Player), "Connor_sim") %>% str_sort()
+                   
+for(i in 1:reps) {
+# masters %>%
+#   group_by(Group) %>% 
+#   slice_max(n = 2, WinOdds_prob)
+picks = masters %>% 
+  filter(Golfer %in% c("Jon Rahm", "Scottie Scheffler", "Cameron Smith", "Adam Scott", "Si Woo Kim", "Russell Henley", "Justin Thomas")) %>% 
+  select(Golfer, Points) %>% 
+  mutate(Player = "Connor_sim")
+
+scramble = data.frame(Golfer = sample(x = masters$Golfer, 
+                                      replace = F, 
+                                      size = nrow(masters), 
+                                      prob = masters$WinOdds_prob)) %>% 
+  cbind(Points_ord)
+
+sim_money = teams %>% 
+  bind_rows(picks) %>% 
+  select(-Points) %>%
+  left_join(scramble, by = "Golfer") %>% 
+  mutate(across(Points, ~replace(., is.na(.), 0))) %>% 
+  group_by(Player) %>% 
+  summarise(Tot_points = sum(Points)) %>% 
+  arrange(desc(Tot_points)) %>% 
+  mutate(Money_won = c(70, 35, rep(0, 75))) %>% 
+  select(-Tot_points) %>% 
+  arrange(Player)
+money3[, i] = sim_money$Money_won
+}
+# If we play this tournament 1000 times how much money do we make?
+m3 = apply(money3, 1, mean) %>% sort()
+```
+
+
+Strategy 4: Choose golfers with lowest count in each group only
+
+```{r}
+money4 = matrix(nrow = 77, ncol = reps)
+rownames(money4) = c(unique(teams$Player), "Connor_sim") %>% str_sort()
+                   
+for(i in 1:reps) {
+# masters %>%
+#   group_by(Group) %>%
+#   slice_min(n = 1, Count)
+picks = masters %>% 
+  filter(Golfer %in% c("Bryson DeChambeau", "Webb Simpson", "Kevin Na", "Ryan Palmer", "Lucas Herbert", "Erik Van Rooyen", "Robert MacIntyre")) %>% 
+  select(Golfer, Points) %>% 
+  mutate(Player = "Connor_sim")
+
+scramble = data.frame(Golfer = sample(x = masters$Golfer, 
+                                      replace = F, 
+                                      size = nrow(masters), 
+                                      prob = masters$WinOdds_prob)) %>% 
+  cbind(Points_ord)
+
+sim_money = teams %>% 
+  bind_rows(picks) %>% 
+  select(-Points) %>%
+  left_join(scramble, by = "Golfer") %>% 
+  mutate(across(Points, ~replace(., is.na(.), 0))) %>% 
+  group_by(Player) %>% 
+  summarise(Tot_points = sum(Points)) %>% 
+  arrange(desc(Tot_points)) %>% 
+  mutate(Money_won = c(70, 35, rep(0, 75))) %>% 
+  select(-Tot_points) %>% 
+  arrange(Player)
+money4[, i] = sim_money$Money_won
+}
+# If we play this tournament 1000 times how much money do we make?
+m4 = apply(money4, 1, mean) %>% sort
+```
+
+
+Strategy 5: Choose golfers with best ratio of prob/(count + 1) + best group 1 golfer for WC
+
+```{r}
+money5 = matrix(nrow = 77, ncol = reps)
+rownames(money5) = c(unique(teams$Player), "Connor_sim") %>% str_sort()
+                   
+for(i in 1:reps) {
+masters %>%
+    mutate(rat = WinOdds_prob/(Count+1)) %>%
+  group_by(Group) %>%
+  slice_max(n = 2, rat)
+picks = masters %>% 
+  filter(Golfer %in% c("Rory McIlroy", "Webb Simpson", "Tyrrell Hatton", "Sergio Garcia", "Lucas Herbert", 
+                       "Erik Van Rooyen", "Bryson DeChambeau")) %>% 
+  select(Golfer, Points) %>% 
+  mutate(Player = "Connor_sim")
+
+scramble = data.frame(Golfer = sample(x = masters$Golfer, 
+                                      replace = F, 
+                                      size = nrow(masters), 
+                                      prob = masters$WinOdds_prob)) %>% 
+  cbind(Points_ord)
+
+sim_money = teams %>% 
+  bind_rows(picks) %>% 
+  select(-Points) %>%
+  left_join(scramble, by = "Golfer") %>% 
+  mutate(across(Points, ~replace(., is.na(.), 0))) %>% 
+  group_by(Player) %>% 
+  summarise(Tot_points = sum(Points)) %>% 
+  arrange(desc(Tot_points)) %>% 
+  mutate(Money_won = c(70, 35, rep(0, 75))) %>% 
+  select(-Tot_points) %>% 
+  arrange(Player)
+money5[, i] = sim_money$Money_won
+}
+# If we play this tournament 1000 times how much money do we make?
+m5 = apply(money5, 1, mean) %>% sort
+```
+
+Strategy 6: Choose golfers with best ratio above 
+
+```{r}
+money6 = matrix(nrow = 77, ncol = reps)
+rownames(money6) = c(unique(teams$Player), "Connor_sim") %>% str_sort()
+                   
+for(i in 1:reps) {
+# masters %>% 
+#     mutate(rat = WinOdds_prob/(Count+1)) %>% 
+#   group_by(Group) %>%
+#   slice_max(n = 2, rat)
+picks = masters %>% 
+  filter(Golfer %in% c("Rory McIlroy", "Webb Simpson", "Tyrrell Hatton", "Sergio Garcia", "Lucas Herbert", 
+                       "Erik Van Rooyen", "Robert MacIntyre")) %>% 
+  select(Golfer, Points) %>% 
+  mutate(Player = "Connor_sim")
+
+scramble = data.frame(Golfer = sample(x = masters$Golfer, 
+                                      replace = F, 
+                                      size = nrow(masters), 
+                                      prob = masters$WinOdds_prob)) %>% 
+  cbind(Points_ord)
+
+sim_money = teams %>% 
+  bind_rows(picks) %>% 
+  select(-Points) %>%
+  left_join(scramble, by = "Golfer") %>% 
+  mutate(across(Points, ~replace(., is.na(.), 0))) %>% 
+  group_by(Player) %>% 
+  summarise(Tot_points = sum(Points)) %>% 
+  arrange(desc(Tot_points)) %>% 
+  mutate(Money_won = c(70, 35, rep(0, 75))) %>% 
+  select(-Tot_points) %>% 
+  arrange(Player)
+money6[, i] = sim_money$Money_won
+}
+# If we play this tournament 1000 times how much money do we make?
+m6 = apply(money6, 1, mean) %>% sort
+```
+
+
+Summary: $ won on average 
+
+```{r}
+dollas = data.frame(x = factor(c("Dan Dalenberg", "Random", "Actual Picks", "Best Golfer Available", "Low Count", "Balance", "Balance (WC BGA)", "Ploener", "Michael Lunn"), 
+                               levels = c("Dan Dalenberg", "Random", "Actual Picks", "Best Golfer Available", 
+                                          "Low Count", "Balance", "Balance (WC BGA)", 
+                                          "Ploener", "Michael Lunn")),
+                    y = c(0.210, 0.987, 1.428, 1.582, 1.659, 2.310, 1.974, 1.519, 3.696))
+
+ggplot(data = dollas, aes(x = x, y = y)) +
+  geom_col(fill = "steelblue") +
+  geom_hline(yintercept = 1/77*70 + 1/76*35) + 
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.6)) + 
+  labs(y = "Average winnings per tourament ($)",
+       x = "Simulation method")
+
+```
+
+

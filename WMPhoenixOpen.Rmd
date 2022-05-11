@@ -75,7 +75,7 @@ Plot
 ```{r}
 comb_res %>% 
   ungroup %>%
-  filter(Group == 1) %>%
+  filter(Group == 6) %>%
   mutate(sc_Win_prob = WinOdds_prob/sum(.$WinOdds_prob),
          sc_WW_prob = WinWith_prob/sum(.$WinWith_prob),
          sc_Pick_prob = Picked_prob/sum(.$Picked_prob)) %>% 
@@ -107,7 +107,39 @@ rahm_wins = one_sim[1, 1] == "Jon Rahm"
 return(rahm_wins)
 }
 # do_once()
-do_many = replicate(10000, do_once())
-mean(do_many) # Should be ~0.091
+# do_many = replicate(1000, do_once())
+# mean(do_many) # Should be ~0.091
+```
+
+
+```{r}
+# Treemap
+library(treemap)
+comb_res %>% 
+  filter(Group == 1) %>% 
+  mutate(WinWith = WinOdds_prob/Count) %>% 
+  expand(Golfer = factor(
+    paste0(
+      Golfer, " (", 100*round(WinOdds_prob/sum(.$WinOdds_prob),2), "%)\n", 100*round(WinOdds_prob/(Count*sum(.$WinOdds_prob)),4),"% for each of the ", Count, " cells"
+      )), 
+         WinOdds_prob, WinWith, Count, Count_exp = 1:Count) %>% 
+  treemap(dtf = ., 
+        index = c("Golfer", "Count_exp"), 
+        vSize = "WinWith",
+        type = "categorical",
+        vColor = "Golfer",
+        position.legend = "none",
+        fontsize.labels = c(16, 0),
+        fontsize.title = 0)
+
+# library(treemapify)
+# comb_res %>% 
+#   filter(Group == 1) %>% 
+#   expand(Golfer, WinOdds_prob, Count, Count_exp = 1:Count) %>% 
+#   ggplot(., aes(fill = Golfer, label = Golfer, area = WinOdds_prob, subgroup = Count_exp)) +
+#   geom_treemap() + 
+#   geom_treemap_text(place = "center", size = 25) + 
+#   theme(legend.position = "none")
+
 ```
 

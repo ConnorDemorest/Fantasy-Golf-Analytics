@@ -1,0 +1,89 @@
+---
+title: "fadf"
+author: "Connor Demorest"
+date: "4/4/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(stringr)
+theme_set(theme_bw())
+```
+
+
+```{r, message = F, warning = F}
+setwd("/Users/connor/Desktop/OneDrive - Montana State University/Golf/Fantasy-Golf-Analytics/data/PicksOddscsv/")
+tbl <-
+    list.files(pattern = "*.csv") %>% 
+    map_df(~read_csv(., id = "Tournament", show_col_types = FALSE))
+```
+
+Times picked
+```{r}
+golfers = tbl %>% 
+  mutate(Week = as.numeric(str_sub(Tournament, 1, 2)),
+         Tournament = str_sub(Tournament, 3, -5L))
+
+golfers %>% 
+  filter(Group == 1, !is.na(WinOdds), Golfer %in% c("Dustin Johnson", "Justin Thomas", "Patrick Cantlay", "Collin Morikawa", "Jordan Spieth")) %>% 
+  ggplot(aes(x = factor(Week), y = Count, color = Golfer)) + 
+  geom_point() + 
+  geom_line(aes(group = Golfer)) +
+  labs(x = "Week",
+       y = "Number times picked")
+
+golfers %>% 
+  filter(Group == 1, !is.na(WinOdds)) %>% 
+  ggplot(aes(x = factor(Week), y = Count/77, color = Golfer)) + 
+  geom_point() + 
+  geom_line(aes(group = Golfer)) +
+  labs(x = "Week",
+       y = "Proportion of times picked") +
+  scale_color_discrete() +
+  ylim(0, 1)
+
+# golfers %>% 
+#   filter(Group == 4, !is.na(WinOdds)) %>% 
+#   ggplot(aes(x = factor(Week), y = WinOdds_prob, color = Golfer)) + 
+#   geom_point() + 
+#   geom_line(aes(group = Golfer)) +
+  # labs(x = "Week",
+  #      y = "Prob to win")
+# 
+golfers %>%
+  filter(Group == 1, !is.na(WinOdds)) %>%
+  ggplot(aes(x = factor(Week), y =  WinOdds_prob)) +
+  geom_col(fill = "limegreen") +
+  #geom_line(aes(group = 1)) +
+  facet_wrap(~Golfer, ncol = 3) +
+  labs(x = "Week",
+       y = "Implied probability to win (from odds)") +
+  ylim(0, 0.2)
+
+golfers %>% 
+  filter(Group == 1, !is.na(WinOdds)) %>%
+  mutate(rat = WinOdds_prob/Count)  %>% 
+  ggplot(aes(x = factor(Week), y =  rat)) +
+  geom_col(fill = "darkcyan") +
+  #geom_line(aes(group = 1)) +
+  facet_wrap(~Golfer, ncol = 3) +
+  labs(x = "Week",
+       y = "Ratio of prob winning to times chosen") +
+  ylim(0, 0.05)
+  
+golfers %>% 
+  filter(Week == 12, Count >= 1) %>% 
+  select(Golfer, Group, WinOdds, WinOdds_prob, Count) %>%
+  slice_min(n = 8, order_by = WinOdds_prob) %>% 
+  rename("Odds to Win" = "WinOdds",
+         "Implied Prob to Win" = "WinOdds_prob",
+         "Frequency picked" = "Count")
+```
+
+
+
+
+

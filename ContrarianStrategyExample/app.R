@@ -1,14 +1,17 @@
 library(shiny)
 library(odds.converter)
 library(tidyverse)
+library(treemap)
 
 # Define UI for application that draws a histogram
 ui <- fluidPage(
     titlePanel("Toy example of the contrarian strategy"),
-    sidebarLayout(
-        sidebarPanel(
-          inputPanel(
-            h3("Relative odds to win"),
+    fluidRow(
+      column(4, 
+             fluidRow(
+               column(6,
+                      inputPanel(
+                        h3("Relative odds to win"),
           # Higher odds are worse chance to win
           # Should force odds to sum to probability of 1,
             # or add "the field" that takes the rest of the prob,
@@ -22,27 +25,28 @@ ui <- fluidPage(
                          min =  1, value = 1, max = 100, step = 1, width = "30%"),
             numericInput(inputId = "Paul_odds", label = "Paul", 
                          min = 1, value = 4, max = 100, step = 1, width = "30%")
-        ),
-        inputPanel(
-          h3("Number times picked"),
+        )),
+        column(6,
+               inputPanel(
+                 h3("Number times picked"),
           # Higher odds are worse chance to win
           # Should force odds to sum to probability of 1,
           # or add "the field" that takes the rest of the prob,
           # or use probs instead of odds and convert the other direction
-          numericInput(inputId = "Adam_pick", label = "Adam", 
-                       min = 0, value = 20, max = 100, step = 1, width = "30%"),
-          numericInput(inputId = "Andy_pick", label = "Andy", 
-                       min = 0, value = 10, max = 100, step = 1, width = "30%"),
-          numericInput(inputId = "Connor_pick", label = "Connor", 
-                       min = 0, value = 2, max = 100, step = 1, width = "30%"),
-          numericInput(inputId = "Paul_pick", label = "Paul", 
-                       min = 0, value = 15, max = 100, step = 1, width = "30%")
+            numericInput(inputId = "Adam_pick", label = "Adam", 
+                         min = 1, value = 20, max = 100, step = 1, width = "30%"),
+            numericInput(inputId = "Andy_pick", label = "Andy", 
+                         min = 1, value = 10, max = 100, step = 1, width = "30%"),
+            numericInput(inputId = "Connor_pick", label = "Connor", 
+                         min = 1, value = 2, max = 100, step = 1, width = "30%"),
+            numericInput(inputId = "Paul_pick", label = "Paul", 
+                         min = 1, value = 15, max = 100, step = 1, width = "30%")
         )
-        ),
-        # Show a plot of the generated distribution
-        mainPanel(
-           plotOutput("OddsPlot"),
-           tableOutput("Table")
+        ))),
+        column(8,
+               plotOutput("OddsPlot"),
+               #tableOutput("Table"),
+               plotOutput("Treemap")
         )
     )
 )
@@ -58,10 +62,8 @@ server <- function(input, output) {
                                     input$Connor_pick,input$Paul_pick)) %>%
          mutate(ProbToWin = Odds/sum(Odds),
                 ProbPicked = Chosen/sum(Chosen),
-                ProbWinWith = (ProbToWin/(Chosen + 1))/sum((ProbToWin/(Chosen + 1))),
                 AmOddsToWin = odds.prob2us(ProbToWin),
-                AmOddsOfPicked = odds.prob2us(ProbPicked),
-                AmOddsToWinWith = odds.prob2us(ProbWinWith)) %>% 
+                AmOddsOfPicked = odds.prob2us(ProbPicked)) %>% 
          pivot_longer(., cols = starts_with("Prob"), 
                       names_to = "Type", values_to = "Probability")
        ggplot(data = data, aes(x = Golfer, y = Probability, fill = Type)) + 
@@ -76,10 +78,37 @@ server <- function(input, output) {
                                    input$Connor_pick,input$Paul_pick)) %>%
         mutate(ProbToWin = RelativeOdds/sum(RelativeOdds),
                ProbPicked = TimesChosen/sum(TimesChosen),
-               ProbWinWith = (ProbToWin/(TimesChosen + 1))/sum((ProbToWin/(TimesChosen + 1))),
-               AmOddsToWin = odds.prob2us(ProbToWin)) %>%
-        select(Golfer, RelativeOdds,TimesChosen, AmOddsToWin, ProbToWin, ProbWinWith)
+               ProbWinWith = (ProbToWin/TimesChosen),
+               AmericanOddsToWin = odds.prob2us(ProbToWin),
+               Pot = sum(TimesChosen),
+               ExpectedEarnings = ProbWinWith*Pot - 1) %>%
+        select(Golfer, RelativeOdds,TimesChosen, AmericanOddsToWin,
+               ProbToWin, ProbWinWith, ExpectedEarnings, Pot)
       })
+  output$Treemap <- renderPlot({
+    data = data.frame(Golfer = c("Adam", "Andy", "Connor", "Paul"), 
+                      Odds = c(input$Adam_odds, input$Andy_odds, 
+                               input$Connor_odds, input$Paul_odds),
+                      Chosen = c(input$Adam_pick,input$Andy_pick,
+                                 input$Connor_pick,input$Paul_pick)) %>%
+      mutate(ProbToWin = Odds/sum(Odds),
+             WinWith = ProbToWin/Chosen) %>% 
+      group_by(Golfer) %>% 
+      expand(Golfer = factor(
+        paste0(
+          Golfer, " (", 100*round(ProbToWin/sum(.$ProbToWin),3), "%)\n", 
+          100*round(ProbToWin/(Chosen*sum(.$ProbToWin)),3), "% chance to win pot for each of the ", Chosen, " bettors"
+        )), 
+        ProbToWin, WinWith, Chosen, Count_exp = 1:Chosen) %>% 
+      treemap(dtf = ., 
+              index = c("Golfer", "Count_exp"), 
+              vSize = "WinWith",
+              type = "categorical",
+              vColor = "Golfer",
+              position.legend = "none",
+              fontsize.labels = c(16, 0),
+              fontsize.title = 0)
+  })
 }
 # Run the application 
 shinyApp(ui = ui, server = server)
